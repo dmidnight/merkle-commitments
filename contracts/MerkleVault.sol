@@ -10,8 +10,17 @@ import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 contract MerkleVault {
   using SafeERC20 for IERC20;
 
-  bytes32 public merkleRoot;
+  struct MerkleRoot {
+    bytes32 merkleRoot; // root of claims merkle tree
+    address erc20; // the ERC20 token address this is for
+    uint256 amountCommited; // the total of all leaves
+    bytes4 ipfs_cid_prefix; // see https://stackoverflow.com/questions/66927626/how-to-store-ipfs-hash-on-ethereum-blockchain-using-smart-contracts
+    bytes32 ipfs_cid_hash; // see https://stackoverflow.com/questions/66927626/how-to-store-ipfs-hash-on-ethereum-blockchain-using-smart-contracts
+  }
+
   mapping(address => uint256) public balance; // balance[tokenAddress]
+  mapping(address => uint256) public merkleRootCount;
+  mapping(address => mapping(uint256 => MerkleRoot)) public merkleRoots;
 
   event NewDeposit(
     address indexed erc20,
@@ -23,6 +32,12 @@ contract MerkleVault {
     address indexed erc20,
     address indexed from,
     uint256 amount
+  );
+
+  event NewMerkleTree(
+    address indexed erc20,
+    uint256 indexed number,
+    uint256 amountCommited
   );
 
   function depositToken(
@@ -40,16 +55,28 @@ contract MerkleVault {
     emit NewDeposit(_erc20, msg.sender, _amount);
   }
 
-  function updateRoot(
-    bytes32 _merkleRoot
+  function newRoot(
+    bytes32 _merkleRoot,
+    address _erc20, // the ERC20 token address this is for
+    uint256 _amountCommited, // the total of all leaves
+    bytes4 _ipfs_cid_prefix, // see https://stackoverflow.com/questions/66927626/how-to-store-ipfs-hash-on-ethereum-blockchain-using-smart-contracts
+    bytes32 _ipfs_cid_hash
   ) external {
     require(_merkleRoot != 0, "Merkle cannot be zero");
-    merkleRoot = _merkleRoot;
+    require(_amountCommited != 0, "Amount cannot be zero");
+    require(_amountCommited <= balance[_erc20], "Insufficient balance");
+
+    merkleRootCount[_erc20] = merkleRootCount[_erc20] + 1;
+    merkleRoots[_erc20][merkleRootCount[_erc20]] = MerkleRoot(_merkleRoot, _erc20, _amountCommited, _ipfs_cid_prefix, _ipfs_cid_hash);
+    balance[_erc20] = balance[_erc20] - _amountCommited;
+
+    emit NewMerkleTree(_erc20, merkleRootCount[_erc20], _amountCommited);
   }
 
   function withdraw(
     address _account,
     address _erc20,
+    uint256 _merkleCount,
     uint256 _amount,
     bytes32[] calldata _merkleProof
   ) external {
@@ -58,7 +85,7 @@ contract MerkleVault {
     bytes32 leaf = _leafHash(_account, _amount);
 
     // merkle proof valid?
-    require(MerkleProof.verify(_merkleProof, merkleRoot, leaf) == true, "Claim not found");
+    require(MerkleProof.verify(_merkleProof, merkleRoots[_erc20][_merkleCount].merkleRoot, leaf) == true, "Claim not found");
 
     balance[_erc20] =balance[_erc20] - _amount;
     IERC20(_erc20).safeTransfer(_account, _amount);

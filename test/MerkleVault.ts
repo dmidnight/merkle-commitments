@@ -80,6 +80,25 @@ describe("MerkleVault", function () {
       deployContractFixture
     );
 
+    await testCoin.mint(otherAccount.address, 1 * 1e8);
+    await testCoin.mint(owner.address, 1 * 1e8);
+
+    await testCoin.connect(otherAccount).approve(merkleVault.address, 1 * 1e8);
+    expect(
+      await merkleVault
+        .connect(otherAccount)
+        .depositToken(testCoin.address, 1 * 1e8)
+    )
+      .to.emit(merkleVault, "NewDeposit")
+      .withArgs(testCoin.address, otherAccount.address, 1 * 1e8);
+
+    await testCoin.approve(merkleVault.address, 1 * 1e8);
+    expect(await merkleVault.depositToken(testCoin.address, 1 * 1e8))
+      .to.emit(merkleVault, "NewDeposit")
+      .withArgs(testCoin.address, otherAccount.address, 1 * 1e8);
+
+    expect(await merkleVault.balance(testCoin.address)).to.equal(2 * 1e8);
+
     const values = [
       [owner.address, 1e4],
       [otherAccount.address, 1e4],
@@ -87,9 +106,17 @@ describe("MerkleVault", function () {
 
     const tree = StandardMerkleTree.of(values, ["address", "uint256"]);
 
-    await merkleVault.updateRoot(tree.root);
+    await merkleVault.newRoot(
+      tree.root,
+      testCoin.address,
+      2 * 1e4,
+      "0x01701220",
+      "0xd429550056530f9752a818e902f5803517f7260ed045ad7752bcc828faeea122"
+    );
 
-    expect(await merkleVault.merkleRoot()).to.equal(tree.root);
+    const root = await merkleVault.merkleRoots(testCoin.address, 1);
+
+    expect(root.merkleRoot).to.equal(tree.root);
   });
 
   it("Should allow withdrawals based on merkle proof", async function () {
@@ -123,9 +150,21 @@ describe("MerkleVault", function () {
 
     const tree = StandardMerkleTree.of(values, ["address", "uint256"]);
 
-    await merkleVault.updateRoot(tree.root);
+    await merkleVault.newRoot(
+      tree.root,
+      testCoin.address,
+      2 * 1e4,
+      "0x01701220",
+      "0xd429550056530f9752a818e902f5803517f7260ed045ad7752bcc828faeea122"
+    );
 
-    expect(await merkleVault.merkleRoot()).to.equal(tree.root);
+    expect(await merkleVault.balance(testCoin.address)).to.equal(
+      2 * 1e8 - 2 * 1e4
+    );
+
+    const root = await merkleVault.merkleRoots(testCoin.address, 1);
+
+    expect(root.merkleRoot).to.equal(tree.root);
 
     for (const [i, v] of tree.entries()) {
       const proof = tree.getProof(i);
@@ -139,7 +178,7 @@ describe("MerkleVault", function () {
 
       console.log("Withdraw", a, testCoin.address, 1 * 1e4, proof);
 
-      await merkleVault.withdraw(a, testCoin.address, 1 * 1e4, proof);
+      await merkleVault.withdraw(a, testCoin.address, 1, 1 * 1e4, proof);
 
       expect(await testCoin.connect(a).balanceOf(a)).to.equal(1 * 1e4);
     }
