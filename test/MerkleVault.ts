@@ -11,14 +11,18 @@ describe("MerkleVault", function () {
   // and reset Hardhat Network to that snapshot in every test.
   async function deployContractFixture() {
     // Contracts are deployed using the first signer/account by default
-    const [owner, otherAccount] = await ethers.getSigners();
+    const [owner, otherAccount, proposer, validator] =
+      await ethers.getSigners();
 
     const MerkleVault = await ethers.getContractFactory("MerkleVault");
     const TestCoin = await ethers.getContractFactory("TestCoin");
-    const merkleVault = await MerkleVault.deploy();
+    const merkleVault = await MerkleVault.deploy(
+      proposer.address,
+      validator.address
+    );
     const testCoin = await TestCoin.deploy();
 
-    return { merkleVault, testCoin, owner, otherAccount };
+    return { merkleVault, testCoin, owner, otherAccount, proposer, validator };
   }
 
   describe("Deployment", function () {
@@ -76,9 +80,8 @@ describe("MerkleVault", function () {
   });
 
   it("Should allow post of merkle root", async function () {
-    const { merkleVault, testCoin, owner, otherAccount } = await loadFixture(
-      deployContractFixture
-    );
+    const { merkleVault, testCoin, owner, otherAccount, proposer, validator } =
+      await loadFixture(deployContractFixture);
 
     await testCoin.mint(otherAccount.address, 1 * 1e8);
     await testCoin.mint(owner.address, 1 * 1e8);
@@ -106,23 +109,29 @@ describe("MerkleVault", function () {
 
     const tree = StandardMerkleTree.of(values, ["address", "uint256"]);
 
-    await merkleVault.newRoot(
-      tree.root,
-      testCoin.address,
-      2 * 1e4,
-      "0x01701220",
-      "0xd429550056530f9752a818e902f5803517f7260ed045ad7752bcc828faeea122"
-    );
+    const dateInSecs = Math.floor(new Date().getTime() / 1000);
+
+    await merkleVault
+      .connect(proposer)
+      .proposeRoot(
+        tree.root,
+        testCoin.address,
+        1,
+        2 * 1e4,
+        dateInSecs,
+        "0x01701220",
+        "0xd429550056530f9752a818e902f5803517f7260ed045ad7752bcc828faeea122"
+      );
+
+    await merkleVault.connect(validator).validateRoot(testCoin.address, 1);
 
     const root = await merkleVault.merkleRoots(testCoin.address, 1);
-
     expect(root.merkleRoot).to.equal(tree.root);
   });
 
   it("Should allow withdrawals based on merkle proof", async function () {
-    const { merkleVault, testCoin, owner, otherAccount } = await loadFixture(
-      deployContractFixture
-    );
+    const { merkleVault, testCoin, owner, otherAccount, proposer, validator } =
+      await loadFixture(deployContractFixture);
 
     await testCoin.mint(otherAccount.address, 1 * 1e8);
     await testCoin.mint(owner.address, 1 * 1e8);
@@ -150,13 +159,21 @@ describe("MerkleVault", function () {
 
     const tree = StandardMerkleTree.of(values, ["address", "uint256"]);
 
-    await merkleVault.newRoot(
-      tree.root,
-      testCoin.address,
-      2 * 1e4,
-      "0x01701220",
-      "0xd429550056530f9752a818e902f5803517f7260ed045ad7752bcc828faeea122"
-    );
+    const dateInSecs = Math.floor(new Date().getTime() / 1000);
+
+    await merkleVault
+      .connect(proposer)
+      .proposeRoot(
+        tree.root,
+        testCoin.address,
+        1,
+        2 * 1e4,
+        dateInSecs,
+        "0x01701220",
+        "0xd429550056530f9752a818e902f5803517f7260ed045ad7752bcc828faeea122"
+      );
+
+    await merkleVault.connect(validator).validateRoot(testCoin.address, 1);
 
     expect(await merkleVault.balance(testCoin.address)).to.equal(
       2 * 1e8 - 2 * 1e4
@@ -169,14 +186,9 @@ describe("MerkleVault", function () {
     for (const [i, v] of tree.entries()) {
       const proof = tree.getProof(i);
 
-      console.log("Value:", v);
-      console.log("Proof:", proof);
-
       const a: string = v[0].toString();
 
       expect(await testCoin.connect(a).balanceOf(a)).to.equal(0);
-
-      console.log("Withdraw", a, testCoin.address, 1 * 1e4, proof);
 
       await merkleVault.withdraw(a, testCoin.address, 1, 1 * 1e4, proof);
 
