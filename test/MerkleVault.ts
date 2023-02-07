@@ -22,6 +22,8 @@ describe("MerkleVault", function () {
     );
     const testCoin = await TestCoin.deploy();
 
+    await merkleVault.setAllowedToken(testCoin.address, true);
+
     return { merkleVault, testCoin, owner, otherAccount, proposer, validator };
   }
 

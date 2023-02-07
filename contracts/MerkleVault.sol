@@ -25,6 +25,7 @@ contract MerkleVault is AccessControl {
   }
 
   mapping(address => uint256) public balance; // balance[tokenAddress]
+  mapping(address => bool) public allowList;
   mapping(address => uint256) public merkleRootCount;
   mapping(address => mapping(uint256 => MerkleRoot)) public merkleRoots;
   mapping(address => uint256) public proposedRootCount;
@@ -56,6 +57,13 @@ contract MerkleVault is AccessControl {
     _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     _grantRole(PROPOSAL_ROLE, proposal);
     _grantRole(VALIDATOR_ROLE, validator);
+  }
+
+  function setAllowedToken(
+    address _erc20,
+    bool _allowed
+  ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    allowList[_erc20] = _allowed;
   }
 
   function depositToken(
