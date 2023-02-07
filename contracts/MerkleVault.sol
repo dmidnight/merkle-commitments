@@ -53,6 +53,11 @@ contract MerkleVault is AccessControl {
     uint256 indexed merkleNumber
   );
 
+  event AllowListChange(
+    address indexed tokenAddress,
+    bool allowed
+  );
+
   constructor(address proposal, address validator) {
     _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     _grantRole(PROPOSAL_ROLE, proposal);
@@ -63,7 +68,10 @@ contract MerkleVault is AccessControl {
     address _erc20,
     bool _allowed
   ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    require(allowList[_erc20] != _allowed, 'Already set');
     allowList[_erc20] = _allowed;
+
+    emit AllowListChange(_erc20, _allowed);
   }
 
   function depositToken(
@@ -87,6 +95,7 @@ contract MerkleVault is AccessControl {
     address _recipient // gift a deposit to someone else
   ) external {
     require(_amount > 0, 'Value cannot be zero');
+    require(allowList[_erc20] == true, 'Token not allowed');
 
     // transfer token to this contract
     IERC20 token = IERC20(_erc20);
