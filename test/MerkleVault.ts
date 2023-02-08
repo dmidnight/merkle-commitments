@@ -279,5 +279,9 @@ describe("MerkleVault", function () {
         merkleVault.withdraw(a, testCoin.address, 1, v[0], 1 * 1e4, proof)
       ).to.be.revertedWith("Already claimed");
     }
+
+    expect(await merkleVault.balance(testCoin.address)).to.equal(
+      2 * 1e8 - 2 * 1e4
+    );
   });
 });

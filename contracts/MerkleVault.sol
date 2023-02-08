@@ -188,7 +188,6 @@ contract MerkleVault is AccessControl {
     require(MerkleProof.verify(_merkleProof, merkleRoots[_tokenAddress][_merkleCount].merkleRoot, leaf) == true, "Claim not found");
 
     _setClaimed(_tokenAddress, _merkleCount, _merkleIndex);
-    balance[_tokenAddress] = balance[_tokenAddress] - _amount;
     
     if(_tokenAddress == address(0)) {
       _account.transfer(_amount);

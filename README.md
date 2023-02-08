@@ -1,6 +1,12 @@
-# Merkle Payments Chain
+# Merkle Payments Contract
 
-This contract allows for offchain computation of merkle trees that contain aggregated payments. Merkle trees are published to IPFS by the proposer role, and validated by the validator role.
+This contract allows for offchain computation of merkle trees that contain aggregated payments.
+
+- Offchain EIP-712 signatures and transaction metadata are published to IPFS by the Proposer role in a form that excludes the sender address.
+- The proposer constructs a merkle tree of all of the payment data, and proposes the merkle tree root to the contract along with the IPFS address of the metadata.
+- The Validator role fetches the data from IPFS, and attempts to verify all of the signatures. It derives the sender address from each signature and aggregates the payments when the sender has sent multiple payments to the same destination. Finally, it constructs a merkle tree. If it is successfully able to recreate the same merkle tree that was proposed, then it can validate it by calling the function of the contract.
+
+## Calculating offchain balances
 
 Deposits and withdrawals emit events that can be queried by address. However, the contract does not store a balance per address.
 
@@ -8,7 +14,7 @@ Clients can fetch the series of merkle trees using the IPFS hashes stored in the
 
 ### This is a Hardhat Project
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
+This project demonstrates a basic Hardhat use case.
 
 Try running some of the following tasks:
 
