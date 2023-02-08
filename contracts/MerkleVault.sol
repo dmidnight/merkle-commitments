@@ -167,9 +167,9 @@ contract MerkleVault is AccessControl {
         return bitMaps[_tokenAddress][_merkleCount].get(index);
     }
 
-    function _setClaimed(address _tokenAddress, uint256 _merkleCount, uint256 index) private {
-       bitMaps[_tokenAddress][_merkleCount].setTo(index, true);
-    }
+  function _setClaimed(address _tokenAddress, uint256 _merkleCount, uint256 index) private {
+      bitMaps[_tokenAddress][_merkleCount].setTo(index, true);
+  }
 
   function withdraw(
     address payable _account,
