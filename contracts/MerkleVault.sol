@@ -18,9 +18,7 @@ contract MerkleVault is AccessControl {
 
   struct MerkleRoot {
     bytes32 merkleRoot; // root of claims merkle tree
-    address tokenAddress; // the ERC20 token address this is for
     uint256 merkleNumber;
-    uint256 amountCommited; // the total of all leaves
     uint endTime; // time in seconds that this block ended
     bytes4 ipfs_cid_prefix; // see https://stackoverflow.com/questions/66927626/how-to-store-ipfs-hash-on-ethereum-blockchain-using-smart-contracts
     bytes32 ipfs_cid_hash; // see https://stackoverflow.com/questions/66927626/how-to-store-ipfs-hash-on-ethereum-blockchain-using-smart-contracts
@@ -28,11 +26,12 @@ contract MerkleVault is AccessControl {
 
   mapping(address => uint256) public balance; // balance[tokenAddress]
   mapping(address => bool) public allowList;
-  mapping(address => uint256) public proposedRootCount;
-  mapping(address => mapping(uint256 => MerkleRoot)) public proposedRoots;
-  mapping(address => uint256) public merkleRootCount;
-  mapping(address => mapping(uint256 => MerkleRoot)) public merkleRoots;
-  mapping(address => mapping(uint256 => BitMaps.BitMap)) private bitMaps;
+  
+  uint256 public proposedRootCount;
+  mapping(uint256 => MerkleRoot) public proposedRoots;
+  uint256 public merkleRootCount;
+  mapping(uint256 => MerkleRoot) public merkleRoots;
+  mapping(uint256 => BitMaps.BitMap) private bitMaps;
 
   event NewDeposit(
     address indexed tokenAddress,
@@ -47,12 +46,10 @@ contract MerkleVault is AccessControl {
   );
 
   event ProposedMerkleTree(
-    address indexed tokenAddress,
     uint256 indexed proposalNumber
   );
 
   event NewMerkleTree(
-    address indexed tokenAddress,
     uint256 indexed merkleNumber
   );
 
@@ -65,24 +62,6 @@ contract MerkleVault is AccessControl {
     _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     _grantRole(PROPOSAL_ROLE, proposal);
     _grantRole(VALIDATOR_ROLE, validator);
-  }
-
-  // method to recover ETH sent to contract directly
-  function recoverNativeToken() external onlyRole(DEFAULT_ADMIN_ROLE) {
-    uint256 contractBalance = address(this).balance;
-    uint256 depositedBalance = balance[address(0)];
-
-    require(contractBalance > depositedBalance, "Contract has no balance");
-    payable(msg.sender).transfer(contractBalance - depositedBalance);
-  }
-
-  //method to recover token sent to contract directly
-  function recoverERC20Token(IERC20 token) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    uint256 contractBalance = token.balanceOf(address(this));
-    uint256 depositedBalance = balance[address(token)];
-
-    require(contractBalance > depositedBalance, "Contract has no balance");
-    require(token.transfer(msg.sender, contractBalance - depositedBalance), "Transfer failed");
   }
 
   function depositNativeToken() external payable {
@@ -145,73 +124,66 @@ contract MerkleVault is AccessControl {
 
   function proposeRoot(
     bytes32 _merkleRoot,
-    address _tokenAddress, // the ERC20 token address this is for
     uint256 _merkleNumber,
-    uint256 _amountCommited, // the total of all leaves
     uint _endTime, // exclusive
     bytes4 _ipfs_cid_prefix, // see https://stackoverflow.com/questions/66927626/how-to-store-ipfs-hash-on-ethereum-blockchain-using-smart-contracts
     bytes32 _ipfs_cid_hash
   ) external onlyRole(PROPOSAL_ROLE) {
     require(_merkleRoot != 0, "Merkle cannot be zero");
-    require(_amountCommited != 0, "Amount cannot be zero");
-    require(_amountCommited <= balance[_tokenAddress], "Insufficient balance");
-    require(_merkleNumber == merkleRootCount[_tokenAddress] + 1, "Invalid sequence");
+    require(_merkleNumber == merkleRootCount + 1, "Invalid sequence");
 
-    proposedRootCount[_tokenAddress] = proposedRootCount[_tokenAddress] + 1;
-    proposedRoots[_tokenAddress][proposedRootCount[_tokenAddress]] = MerkleRoot(
-      _merkleRoot, _tokenAddress, _merkleNumber, _amountCommited, _endTime, _ipfs_cid_prefix, _ipfs_cid_hash
+    proposedRootCount = proposedRootCount + 1;
+    proposedRoots[proposedRootCount] = MerkleRoot(
+      _merkleRoot, _merkleNumber, _endTime, _ipfs_cid_prefix, _ipfs_cid_hash
     );
 
-    emit ProposedMerkleTree(_tokenAddress, proposedRootCount[_tokenAddress]);
+    emit ProposedMerkleTree(proposedRootCount);
   }
 
   function validateRoot(
-    address _tokenAddress, // the ERC20 token address this is for
     uint256 _proposalNumber
   ) external onlyRole(VALIDATOR_ROLE) {
 
-    MerkleRoot memory proposed = proposedRoots[_tokenAddress][_proposalNumber];
-    require(proposed.tokenAddress == _tokenAddress, "Does not match proposal");
-    require(proposed.amountCommited <= balance[_tokenAddress], "Insufficient balance");
-    require(proposed.merkleNumber == merkleRootCount[_tokenAddress] + 1, "Invalid sequence");
+    MerkleRoot memory proposed = proposedRoots[_proposalNumber];
+    require(proposed.merkleNumber == merkleRootCount + 1, "Invalid sequence");
 
-    merkleRootCount[_tokenAddress] = merkleRootCount[_tokenAddress] + 1;
-    balance[_tokenAddress] = balance[_tokenAddress] - proposed.amountCommited;
-    merkleRoots[_tokenAddress][merkleRootCount[_tokenAddress]] = proposed;
+    merkleRootCount = merkleRootCount + 1;
+    merkleRoots[merkleRootCount] = proposed;
 
-    emit NewMerkleTree(_tokenAddress, merkleRootCount[_tokenAddress]);
+    emit NewMerkleTree(merkleRootCount);
   }
 
-  function isClaimed(address _tokenAddress, uint256 _merkleCount, uint256 index) public view returns (bool) {
-    return bitMaps[_tokenAddress][_merkleCount].get(index);
+  function isClaimed(uint256 _merkleCount, uint256 index) public view returns (bool) {
+    return bitMaps[_merkleCount].get(index);
   }
 
-  function _setClaimed(address _tokenAddress, uint256 _merkleCount, uint256 index) private {
-    bitMaps[_tokenAddress][_merkleCount].setTo(index, true);
+  function _setClaimed(uint256 _merkleCount, uint256 index) private {
+    bitMaps[_merkleCount].setTo(index, true);
   }
 
   function withdraw(
-    address payable _account,
+    address payable _recipient,
     address _tokenAddress,
     uint256 _merkleCount,
     uint256 _merkleIndex,
     uint256 _amount,
     bytes32[] calldata _merkleProof
   ) external {
-    require(isClaimed(_tokenAddress, _merkleCount, _merkleIndex) == false, "Already claimed");
+    require(isClaimed(_merkleCount, _merkleIndex) == false, "Already claimed");
     require(balance[_tokenAddress] >= _amount, "Insufficient balance");
 
-    bytes32 leaf = _leafHash(_merkleIndex, _account, _amount);
+    bytes32 leaf = _leafHash(_merkleIndex, _tokenAddress, _recipient, _amount);
 
     // merkle proof valid?
-    require(MerkleProof.verify(_merkleProof, merkleRoots[_tokenAddress][_merkleCount].merkleRoot, leaf) == true, "Claim not found");
+    require(MerkleProof.verify(_merkleProof, merkleRoots[_merkleCount].merkleRoot, leaf) == true, "Claim not found");
 
-    _setClaimed(_tokenAddress, _merkleCount, _merkleIndex);
+    _setClaimed(_merkleCount, _merkleIndex);
+    balance[_tokenAddress] = balance[_tokenAddress] - _amount;
     
     if(_tokenAddress == address(0)) {
-      _account.transfer(_amount);
+      _recipient.transfer(_amount);
     } else {
-      IERC20(_tokenAddress).safeTransfer(_account, _amount); 
+      IERC20(_tokenAddress).safeTransfer(_recipient, _amount); 
     }
 
     emit NewWithdrawal(_tokenAddress, msg.sender, _amount);
@@ -219,7 +191,7 @@ contract MerkleVault is AccessControl {
 
   // generate hash of (claim holder, amount)
   // claim holder must be the caller
-  function _leafHash(uint256 index, address account, uint256 amount) internal pure returns (bytes32) {
-    return keccak256(bytes.concat(keccak256(abi.encode(index, account, amount))));
+  function _leafHash(uint256 index, address tokenAddress, address recipient, uint256 amount) internal pure returns (bytes32) {
+    return keccak256(bytes.concat(keccak256(abi.encode(index, tokenAddress, recipient, amount))));
   }
 }
