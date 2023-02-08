@@ -68,7 +68,7 @@ contract MerkleVault is AccessControl {
   }
 
   // method to recover ETH sent to contract directly
-  function recoverGasToken() external onlyRole(DEFAULT_ADMIN_ROLE) {
+  function recoverNativeToken() external onlyRole(DEFAULT_ADMIN_ROLE) {
     uint256 contractBalance = address(this).balance;
     uint256 depositedBalance = balance[address(0)];
 
@@ -76,7 +76,7 @@ contract MerkleVault is AccessControl {
     payable(msg.sender).transfer(contractBalance - depositedBalance);
   }
 
-  //method to rescue token sent to contract directly
+  //method to recover token sent to contract directly
   function recoverERC20Token(IERC20 token) external onlyRole(DEFAULT_ADMIN_ROLE) {
     uint256 contractBalance = token.balanceOf(address(this));
     uint256 depositedBalance = balance[address(token)];
