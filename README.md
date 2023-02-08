@@ -1,6 +1,6 @@
-# Merkle Payments Contract
+# Merkle Commitments Contract
 
-This contract allows for offchain computation of merkle trees that contain aggregated payments.
+This contract allows for offchain computation of merkle trees that contain aggregated payment commitments.
 
 - Offchain EIP-712 signatures and transaction metadata are published to IPFS by the Proposer role in a form that excludes the sender address.
 - The proposer constructs a merkle tree of all of the payment data, and proposes the merkle tree root to the contract along with the IPFS address of the metadata.
