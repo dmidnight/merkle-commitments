@@ -13,6 +13,14 @@ contract MerkleVault is AccessControl {
   using SafeERC20 for IERC20;
   using BitMaps for BitMaps.BitMap;
 
+  error AlreadyClaimed();
+  error AlreadySet();
+  error CannotBeZero();
+  error ClaimNotFound();
+  error InsufficientBalance();
+  error InvalidSequence();
+  error TokenNotAllowed();
+
   bytes32 public constant PROPOSAL_ROLE = keccak256("PROPOSAL_ROLE");
   bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
 
@@ -65,15 +73,13 @@ contract MerkleVault is AccessControl {
   }
 
   function depositNativeToken() external payable {
-    require(allowList[address(0)] == true, 'Token not allowed');
-    balance[address(0)] += msg.value;
-    emit NewDeposit(address(0), msg.sender, msg.value);
+    return depositNativeTokenFor(msg.sender);
   }
 
-  function depositFor(
+  function depositNativeTokenFor(
     address _recipient // gift a deposit to someone else
-  ) external payable {
-    require(allowList[address(0)] == true, 'Token not allowed');
+  ) public payable {
+    if (allowList[address(0)] == true) revert TokenNotAllowed();
     balance[address(0)] += msg.value;
     emit NewDeposit(address(0), _recipient, msg.value);
   }
@@ -82,7 +88,7 @@ contract MerkleVault is AccessControl {
     address _tokenAddress,
     bool _allowed
   ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    require(allowList[_tokenAddress] != _allowed, 'Already set');
+    if (allowList[_tokenAddress] == _allowed) revert AlreadySet();
 
     allowList[_tokenAddress] = _allowed;
 
@@ -93,25 +99,16 @@ contract MerkleVault is AccessControl {
     address _tokenAddress,
     uint256 _amount
   ) external {
-    require(_amount > 0, 'Value cannot be zero');
-    require(allowList[_tokenAddress] == true, 'Token not allowed');
-
-    // transfer token to this contract
-    IERC20 token = IERC20(_tokenAddress);
-    token.safeTransferFrom(msg.sender, address(this), _amount);
-
-    balance[_tokenAddress] += _amount;
-
-    emit NewDeposit(_tokenAddress, msg.sender, _amount);
+    return depositTokenFor(_tokenAddress, _amount, msg.sender);
   }
 
   function depositTokenFor(
     address _tokenAddress,
     uint256 _amount,
     address _recipient // gift a deposit to someone else
-  ) external {
-    require(_amount > 0, 'Value cannot be zero');
-    require(allowList[_tokenAddress] == true, 'Token not allowed');
+  ) public {
+    if (_amount == 0) revert CannotBeZero();
+    if (allowList[_tokenAddress] != true) revert TokenNotAllowed();
 
     // transfer token to this contract
     IERC20 token = IERC20(_tokenAddress);
@@ -129,8 +126,8 @@ contract MerkleVault is AccessControl {
     bytes4 _ipfs_cid_prefix, // see https://stackoverflow.com/questions/66927626/how-to-store-ipfs-hash-on-ethereum-blockchain-using-smart-contracts
     bytes32 _ipfs_cid_hash
   ) external onlyRole(PROPOSAL_ROLE) {
-    require(_merkleRoot != 0, "Merkle cannot be zero");
-    require(_merkleNumber == merkleRootCount + 1, "Invalid sequence");
+    if (_merkleRoot == 0) revert CannotBeZero();
+    if (_merkleNumber != merkleRootCount + 1) revert InvalidSequence();
 
     proposedRootCount = proposedRootCount + 1;
     proposedRoots[proposedRootCount] = MerkleRoot(
@@ -145,7 +142,7 @@ contract MerkleVault is AccessControl {
   ) external onlyRole(VALIDATOR_ROLE) {
 
     MerkleRoot memory proposed = proposedRoots[_proposalNumber];
-    require(proposed.merkleNumber == merkleRootCount + 1, "Invalid sequence");
+    if (proposed.merkleNumber != merkleRootCount + 1) revert InvalidSequence();
 
     merkleRootCount = merkleRootCount + 1;
     merkleRoots[merkleRootCount] = proposed;
@@ -169,13 +166,13 @@ contract MerkleVault is AccessControl {
     uint256 _amount,
     bytes32[] calldata _merkleProof
   ) external {
-    require(isClaimed(_merkleCount, _merkleIndex) == false, "Already claimed");
-    require(balance[_tokenAddress] >= _amount, "Insufficient balance");
+    if (isClaimed(_merkleCount, _merkleIndex) != false) revert AlreadyClaimed();
+    if (balance[_tokenAddress] < _amount) revert InsufficientBalance();
 
     bytes32 leaf = _leafHash(_merkleIndex, _tokenAddress, _recipient, _amount);
 
     // merkle proof valid?
-    require(MerkleProof.verify(_merkleProof, merkleRoots[_merkleCount].merkleRoot, leaf) == true, "Claim not found");
+    if (MerkleProof.verify(_merkleProof, merkleRoots[_merkleCount].merkleRoot, leaf) != true) revert ClaimNotFound();
 
     _setClaimed(_merkleCount, _merkleIndex);
     balance[_tokenAddress] = balance[_tokenAddress] - _amount;
