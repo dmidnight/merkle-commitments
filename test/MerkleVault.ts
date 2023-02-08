@@ -105,12 +105,13 @@ describe("MerkleVault", function () {
     expect(await merkleVault.balance(testCoin.address)).to.equal(2 * 1e8);
 
     const values = [
-      [0, owner.address, 1e4],
-      [1, otherAccount.address, 1e4],
+      [0, testCoin.address, owner.address, 1e4],
+      [1, testCoin.address, otherAccount.address, 1e4],
     ];
 
     const tree = StandardMerkleTree.of(values, [
       "uint256",
+      "address",
       "address",
       "uint256",
     ]);
@@ -121,17 +122,15 @@ describe("MerkleVault", function () {
       .connect(proposer)
       .proposeRoot(
         tree.root,
-        testCoin.address,
         1,
-        2 * 1e4,
         dateInSecs,
         "0x01701220",
         "0xd429550056530f9752a818e902f5803517f7260ed045ad7752bcc828faeea122"
       );
 
-    await merkleVault.connect(validator).validateRoot(testCoin.address, 1);
+    await merkleVault.connect(validator).validateRoot(1);
 
-    const root = await merkleVault.merkleRoots(testCoin.address, 1);
+    const root = await merkleVault.merkleRoots(1);
     expect(root.merkleRoot).to.equal(tree.root);
   });
 
@@ -159,12 +158,13 @@ describe("MerkleVault", function () {
     expect(await merkleVault.balance(testCoin.address)).to.equal(2 * 1e8);
 
     const values = [
-      [0, owner.address, 1e4],
-      [1, otherAccount.address, 1e4],
+      [0, testCoin.address, owner.address, 1e4],
+      [1, testCoin.address, otherAccount.address, 1e4],
     ];
 
     const tree = StandardMerkleTree.of(values, [
       "uint256",
+      "address",
       "address",
       "uint256",
     ]);
@@ -175,28 +175,22 @@ describe("MerkleVault", function () {
       .connect(proposer)
       .proposeRoot(
         tree.root,
-        testCoin.address,
         1,
-        2 * 1e4,
         dateInSecs,
         "0x01701220",
         "0xd429550056530f9752a818e902f5803517f7260ed045ad7752bcc828faeea122"
       );
 
-    await merkleVault.connect(validator).validateRoot(testCoin.address, 1);
+    await merkleVault.connect(validator).validateRoot(1);
 
-    expect(await merkleVault.balance(testCoin.address)).to.equal(
-      2 * 1e8 - 2 * 1e4
-    );
-
-    const root = await merkleVault.merkleRoots(testCoin.address, 1);
+    const root = await merkleVault.merkleRoots(1);
 
     expect(root.merkleRoot).to.equal(tree.root);
 
     for (const [i, v] of tree.entries()) {
       const proof = tree.getProof(i);
 
-      const a: string = v[1].toString();
+      const a: string = v[2].toString();
 
       expect(await testCoin.connect(a).balanceOf(a)).to.equal(0);
 
@@ -230,12 +224,13 @@ describe("MerkleVault", function () {
     expect(await merkleVault.balance(testCoin.address)).to.equal(2 * 1e8);
 
     const values = [
-      [0, owner.address, 1e4],
-      [1, otherAccount.address, 1e4],
+      [0, testCoin.address, owner.address, 1e4],
+      [1, testCoin.address, otherAccount.address, 1e4],
     ];
 
     const tree = StandardMerkleTree.of(values, [
       "uint256",
+      "address",
       "address",
       "uint256",
     ]);
@@ -246,28 +241,22 @@ describe("MerkleVault", function () {
       .connect(proposer)
       .proposeRoot(
         tree.root,
-        testCoin.address,
         1,
-        2 * 1e4,
         dateInSecs,
         "0x01701220",
         "0xd429550056530f9752a818e902f5803517f7260ed045ad7752bcc828faeea122"
       );
 
-    await merkleVault.connect(validator).validateRoot(testCoin.address, 1);
+    await merkleVault.connect(validator).validateRoot(1);
 
-    expect(await merkleVault.balance(testCoin.address)).to.equal(
-      2 * 1e8 - 2 * 1e4
-    );
-
-    const root = await merkleVault.merkleRoots(testCoin.address, 1);
+    const root = await merkleVault.merkleRoots(1);
 
     expect(root.merkleRoot).to.equal(tree.root);
 
     for (const [i, v] of tree.entries()) {
       const proof = tree.getProof(i);
 
-      const a: string = v[1].toString();
+      const a: string = v[2].toString();
 
       expect(await testCoin.connect(a).balanceOf(a)).to.equal(0);
 
