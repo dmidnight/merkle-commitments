@@ -99,7 +99,7 @@ contract MerkleVault is AccessControl {
     address _tokenAddress,
     uint256 _amount
   ) external {
-    depositTokenFor(_tokenAddress, _amount, msg.sender);
+    return depositTokenFor(_tokenAddress, _amount, msg.sender);
   }
 
   function depositTokenFor(
