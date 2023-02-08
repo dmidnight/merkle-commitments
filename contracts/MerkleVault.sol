@@ -67,7 +67,25 @@ contract MerkleVault is AccessControl {
     _grantRole(VALIDATOR_ROLE, validator);
   }
 
-  receive() external payable {
+  // method to recover ETH sent to contract directly
+  function recoverGasToken() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    uint256 contractBalance = address(this).balance;
+    uint256 depositedBalance = balance[address(0)];
+
+    require(contractBalance > depositedBalance, "Contract has no balance");
+    payable(msg.sender).transfer(contractBalance - depositedBalance);
+  }
+
+  //method to rescue token sent to contract directly
+  function recoverERC20Token(IERC20 token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    uint256 contractBalance = token.balanceOf(address(this));
+    uint256 depositedBalance = balance[address(token)];
+
+    require(contractBalance > depositedBalance, "Contract has no balance");
+    require(token.transfer(msg.sender, contractBalance - depositedBalance), "Transfer failed");
+  }
+
+  function depositNativeToken() external payable {
     require(allowList[address(0)] == true, 'Token not allowed');
     balance[address(0)] += msg.value;
     emit NewDeposit(address(0), msg.sender, msg.value);
@@ -86,6 +104,7 @@ contract MerkleVault is AccessControl {
     bool _allowed
   ) external onlyRole(DEFAULT_ADMIN_ROLE) {
     require(allowList[_tokenAddress] != _allowed, 'Already set');
+
     allowList[_tokenAddress] = _allowed;
 
     emit AllowListChange(_tokenAddress, _allowed);
