@@ -164,11 +164,11 @@ contract MerkleVault is AccessControl {
   }
 
   function isClaimed(address _tokenAddress, uint256 _merkleCount, uint256 index) public view returns (bool) {
-        return bitMaps[_tokenAddress][_merkleCount].get(index);
-    }
+    return bitMaps[_tokenAddress][_merkleCount].get(index);
+  }
 
   function _setClaimed(address _tokenAddress, uint256 _merkleCount, uint256 index) private {
-      bitMaps[_tokenAddress][_merkleCount].setTo(index, true);
+    bitMaps[_tokenAddress][_merkleCount].setTo(index, true);
   }
 
   function withdraw(
@@ -187,14 +187,14 @@ contract MerkleVault is AccessControl {
     // merkle proof valid?
     require(MerkleProof.verify(_merkleProof, merkleRoots[_tokenAddress][_merkleCount].merkleRoot, leaf) == true, "Claim not found");
 
+    _setClaimed(_tokenAddress, _merkleCount, _merkleIndex);
     balance[_tokenAddress] = balance[_tokenAddress] - _amount;
+    
     if(_tokenAddress == address(0)) {
       _account.transfer(_amount);
     } else {
       IERC20(_tokenAddress).safeTransfer(_account, _amount); 
     }
-
-    _setClaimed(_tokenAddress, _merkleCount, _merkleIndex);
 
     emit NewWithdrawal(_tokenAddress, msg.sender, _amount);
   }
@@ -202,6 +202,6 @@ contract MerkleVault is AccessControl {
   // generate hash of (claim holder, amount)
   // claim holder must be the caller
   function _leafHash(uint256 index, address account, uint256 amount) internal pure returns (bytes32) {
-      return keccak256(bytes.concat(keccak256(abi.encode(index, account, amount))));
+    return keccak256(bytes.concat(keccak256(abi.encode(index, account, amount))));
   }
 }
