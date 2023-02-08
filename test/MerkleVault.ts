@@ -266,7 +266,7 @@ describe("MerkleVault", function () {
 
       await expect(
         merkleVault.withdraw(a, testCoin.address, 1, v[0], 1 * 1e4, proof)
-      ).to.be.revertedWith("Already claimed");
+      ).to.be.to.be.revertedWithCustomError(merkleVault, "AlreadyClaimed");
     }
 
     expect(await merkleVault.balance(testCoin.address)).to.equal(
