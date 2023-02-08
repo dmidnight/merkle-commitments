@@ -1,5 +1,10 @@
 # Merkle Commitments Contract
 
+Inspired by these fine projects:
+
+- https://github.com/Uniswap/merkle-distributor/blob/master/contracts/MerkleDistributor.sol
+- https://github.com/bloq/sol-mass-payouts/blob/master/contracts/MerkleBox.sol
+
 This contract allows for offchain computation of merkle trees that contain aggregated payment commitments.
 
 - Offchain EIP-712 signatures and transaction metadata are published to IPFS by the Proposer role in a form that excludes the sender address.
@@ -10,7 +15,7 @@ This contract allows for offchain computation of merkle trees that contain aggre
 
 Deposits and withdrawals emit events that can be queried by address. However, the contract does not store a balance per address.
 
-Clients can fetch the series of merkle trees using the IPFS hashes stored in the contract. These can be used in combination with the contract desposit events to calculate balances. The merkle tree can also be used to generate a proof for withdrawal. By providing a proof to the contract, a client is able to withdraw funds that have been commited to them in each merkle tree.
+Clients can fetch the series of metadata using the IPFS hashes stored in the contract, in the same way as the validator. These can be used in combination with the contract desposit events to calculate balances. The client can reconstruct a merkle tree to be used to generate a proof for withdrawal. By providing a proof to the contract, a client is able to withdraw funds that have been commited to them in each merkle tree.
 
 ### This is a Hardhat Project
 
