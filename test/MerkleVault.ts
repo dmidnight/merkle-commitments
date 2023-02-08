@@ -105,11 +105,15 @@ describe("MerkleVault", function () {
     expect(await merkleVault.balance(testCoin.address)).to.equal(2 * 1e8);
 
     const values = [
-      [owner.address, 1e4],
-      [otherAccount.address, 1e4],
+      [0, owner.address, 1e4],
+      [1, otherAccount.address, 1e4],
     ];
 
-    const tree = StandardMerkleTree.of(values, ["address", "uint256"]);
+    const tree = StandardMerkleTree.of(values, [
+      "uint256",
+      "address",
+      "uint256",
+    ]);
 
     const dateInSecs = Math.floor(new Date().getTime() / 1000);
 
@@ -155,11 +159,15 @@ describe("MerkleVault", function () {
     expect(await merkleVault.balance(testCoin.address)).to.equal(2 * 1e8);
 
     const values = [
-      [owner.address, 1e4],
-      [otherAccount.address, 1e4],
+      [0, owner.address, 1e4],
+      [1, otherAccount.address, 1e4],
     ];
 
-    const tree = StandardMerkleTree.of(values, ["address", "uint256"]);
+    const tree = StandardMerkleTree.of(values, [
+      "uint256",
+      "address",
+      "uint256",
+    ]);
 
     const dateInSecs = Math.floor(new Date().getTime() / 1000);
 
@@ -188,13 +196,88 @@ describe("MerkleVault", function () {
     for (const [i, v] of tree.entries()) {
       const proof = tree.getProof(i);
 
-      const a: string = v[0].toString();
+      const a: string = v[1].toString();
 
       expect(await testCoin.connect(a).balanceOf(a)).to.equal(0);
 
-      await merkleVault.withdraw(a, testCoin.address, 1, 1 * 1e4, proof);
+      await merkleVault.withdraw(a, testCoin.address, 1, v[0], 1 * 1e4, proof);
 
       expect(await testCoin.connect(a).balanceOf(a)).to.equal(1 * 1e4);
+    }
+  });
+
+  it("Should not allow withdrawals more than once", async function () {
+    const { merkleVault, testCoin, owner, otherAccount, proposer, validator } =
+      await loadFixture(deployContractFixture);
+
+    await testCoin.mint(otherAccount.address, 1 * 1e8);
+    await testCoin.mint(owner.address, 1 * 1e8);
+
+    await testCoin.connect(otherAccount).approve(merkleVault.address, 1 * 1e8);
+    expect(
+      await merkleVault
+        .connect(otherAccount)
+        .depositToken(testCoin.address, 1 * 1e8)
+    )
+      .to.emit(merkleVault, "NewDeposit")
+      .withArgs(testCoin.address, otherAccount.address, 1 * 1e8);
+
+    await testCoin.approve(merkleVault.address, 1 * 1e8);
+    expect(await merkleVault.depositToken(testCoin.address, 1 * 1e8))
+      .to.emit(merkleVault, "NewDeposit")
+      .withArgs(testCoin.address, otherAccount.address, 1 * 1e8);
+
+    expect(await merkleVault.balance(testCoin.address)).to.equal(2 * 1e8);
+
+    const values = [
+      [0, owner.address, 1e4],
+      [1, otherAccount.address, 1e4],
+    ];
+
+    const tree = StandardMerkleTree.of(values, [
+      "uint256",
+      "address",
+      "uint256",
+    ]);
+
+    const dateInSecs = Math.floor(new Date().getTime() / 1000);
+
+    await merkleVault
+      .connect(proposer)
+      .proposeRoot(
+        tree.root,
+        testCoin.address,
+        1,
+        2 * 1e4,
+        dateInSecs,
+        "0x01701220",
+        "0xd429550056530f9752a818e902f5803517f7260ed045ad7752bcc828faeea122"
+      );
+
+    await merkleVault.connect(validator).validateRoot(testCoin.address, 1);
+
+    expect(await merkleVault.balance(testCoin.address)).to.equal(
+      2 * 1e8 - 2 * 1e4
+    );
+
+    const root = await merkleVault.merkleRoots(testCoin.address, 1);
+
+    expect(root.merkleRoot).to.equal(tree.root);
+
+    for (const [i, v] of tree.entries()) {
+      const proof = tree.getProof(i);
+
+      const a: string = v[1].toString();
+
+      expect(await testCoin.connect(a).balanceOf(a)).to.equal(0);
+
+      await merkleVault.withdraw(a, testCoin.address, 1, v[0], 1 * 1e4, proof);
+
+      expect(await testCoin.connect(a).balanceOf(a)).to.equal(1 * 1e4);
+
+      await expect(
+        merkleVault.withdraw(a, testCoin.address, 1, v[0], 1 * 1e4, proof)
+      ).to.be.revertedWith("Already claimed");
     }
   });
 });
