@@ -18,7 +18,7 @@ contract MerkleVault is AccessControl {
 
   struct MerkleRoot {
     bytes32 merkleRoot; // root of claims merkle tree
-    address erc20; // the ERC20 token address this is for
+    address tokenAddress; // the ERC20 token address this is for
     uint256 merkleNumber;
     uint256 amountCommited; // the total of all leaves
     uint endTime; // time in seconds that this block ended
@@ -35,24 +35,24 @@ contract MerkleVault is AccessControl {
   mapping(address => mapping(uint256 => BitMaps.BitMap)) private bitMaps;
 
   event NewDeposit(
-    address indexed erc20,
+    address indexed tokenAddress,
     address indexed from,
     uint256 amount
   );
 
   event NewWithdrawal(
-    address indexed erc20,
+    address indexed tokenAddress,
     address indexed from,
     uint256 amount
   );
 
   event ProposedMerkleTree(
-    address indexed erc20,
+    address indexed tokenAddress,
     uint256 indexed proposalNumber
   );
 
   event NewMerkleTree(
-    address indexed erc20,
+    address indexed tokenAddress,
     uint256 indexed merkleNumber
   );
 
@@ -67,51 +67,66 @@ contract MerkleVault is AccessControl {
     _grantRole(VALIDATOR_ROLE, validator);
   }
 
+  receive() external payable {
+    require(allowList[address(0)] == true, 'Token not allowed');
+    balance[address(0)] += msg.value;
+    emit NewDeposit(address(0), msg.sender, msg.value);
+  }
+
+  function depositFor(
+    address _recipient // gift a deposit to someone else
+  ) external payable {
+    require(allowList[address(0)] == true, 'Token not allowed');
+    balance[address(0)] += msg.value;
+    emit NewDeposit(address(0), _recipient, msg.value);
+  }
+
   function setAllowedToken(
-    address _erc20,
+    address _tokenAddress,
     bool _allowed
   ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    require(allowList[_erc20] != _allowed, 'Already set');
-    allowList[_erc20] = _allowed;
+    require(allowList[_tokenAddress] != _allowed, 'Already set');
+    allowList[_tokenAddress] = _allowed;
 
-    emit AllowListChange(_erc20, _allowed);
+    emit AllowListChange(_tokenAddress, _allowed);
   }
 
   function depositToken(
-    address _erc20,
+    address _tokenAddress,
     uint256 _amount
   ) external {
     require(_amount > 0, 'Value cannot be zero');
+    require(allowList[_tokenAddress] == true, 'Token not allowed');
 
     // transfer token to this contract
-    IERC20 token = IERC20(_erc20);
+    IERC20 token = IERC20(_tokenAddress);
     token.safeTransferFrom(msg.sender, address(this), _amount);
 
-    balance[_erc20] += _amount;
+    balance[_tokenAddress] += _amount;
 
-    emit NewDeposit(_erc20, msg.sender, _amount);
+    emit NewDeposit(_tokenAddress, msg.sender, _amount);
   }
 
   function depositTokenFor(
-    address _erc20,
+    address _tokenAddress,
     uint256 _amount,
     address _recipient // gift a deposit to someone else
   ) external {
     require(_amount > 0, 'Value cannot be zero');
-    require(allowList[_erc20] == true, 'Token not allowed');
+    require(allowList[_tokenAddress] == true, 'Token not allowed');
 
     // transfer token to this contract
-    IERC20 token = IERC20(_erc20);
+    IERC20 token = IERC20(_tokenAddress);
     token.safeTransferFrom(msg.sender, address(this), _amount);
 
-    balance[_erc20] += _amount;
+    balance[_tokenAddress] += _amount;
 
-    emit NewDeposit(_erc20, _recipient, _amount);
+    emit NewDeposit(_tokenAddress, _recipient, _amount);
   }
 
   function proposeRoot(
     bytes32 _merkleRoot,
-    address _erc20, // the ERC20 token address this is for
+    address _tokenAddress, // the ERC20 token address this is for
     uint256 _merkleNumber,
     uint256 _amountCommited, // the total of all leaves
     uint _endTime, // exclusive
@@ -120,64 +135,68 @@ contract MerkleVault is AccessControl {
   ) external onlyRole(PROPOSAL_ROLE) {
     require(_merkleRoot != 0, "Merkle cannot be zero");
     require(_amountCommited != 0, "Amount cannot be zero");
-    require(_amountCommited <= balance[_erc20], "Insufficient balance");
-    require(_merkleNumber == merkleRootCount[_erc20] + 1, "Invalid sequence");
+    require(_amountCommited <= balance[_tokenAddress], "Insufficient balance");
+    require(_merkleNumber == merkleRootCount[_tokenAddress] + 1, "Invalid sequence");
 
-    proposedRootCount[_erc20] = proposedRootCount[_erc20] + 1;
-    proposedRoots[_erc20][proposedRootCount[_erc20]] = MerkleRoot(
-      _merkleRoot, _erc20, _merkleNumber, _amountCommited, _endTime, _ipfs_cid_prefix, _ipfs_cid_hash
+    proposedRootCount[_tokenAddress] = proposedRootCount[_tokenAddress] + 1;
+    proposedRoots[_tokenAddress][proposedRootCount[_tokenAddress]] = MerkleRoot(
+      _merkleRoot, _tokenAddress, _merkleNumber, _amountCommited, _endTime, _ipfs_cid_prefix, _ipfs_cid_hash
     );
 
-    emit ProposedMerkleTree(_erc20, proposedRootCount[_erc20]);
+    emit ProposedMerkleTree(_tokenAddress, proposedRootCount[_tokenAddress]);
   }
 
   function validateRoot(
-    address _erc20, // the ERC20 token address this is for
+    address _tokenAddress, // the ERC20 token address this is for
     uint256 _proposalNumber
   ) external onlyRole(VALIDATOR_ROLE) {
 
-    MerkleRoot memory proposed = proposedRoots[_erc20][_proposalNumber];
-    require(proposed.erc20 == _erc20, "Does not match proposal");
-    require(proposed.amountCommited <= balance[_erc20], "Insufficient balance");
-    require(proposed.merkleNumber == merkleRootCount[_erc20] + 1, "Invalid sequence");
+    MerkleRoot memory proposed = proposedRoots[_tokenAddress][_proposalNumber];
+    require(proposed.tokenAddress == _tokenAddress, "Does not match proposal");
+    require(proposed.amountCommited <= balance[_tokenAddress], "Insufficient balance");
+    require(proposed.merkleNumber == merkleRootCount[_tokenAddress] + 1, "Invalid sequence");
 
-    merkleRootCount[_erc20] = merkleRootCount[_erc20] + 1;
-    balance[_erc20] = balance[_erc20] - proposed.amountCommited;
-    merkleRoots[_erc20][merkleRootCount[_erc20]] = proposed;
+    merkleRootCount[_tokenAddress] = merkleRootCount[_tokenAddress] + 1;
+    balance[_tokenAddress] = balance[_tokenAddress] - proposed.amountCommited;
+    merkleRoots[_tokenAddress][merkleRootCount[_tokenAddress]] = proposed;
 
-    emit NewMerkleTree(_erc20, merkleRootCount[_erc20]);
+    emit NewMerkleTree(_tokenAddress, merkleRootCount[_tokenAddress]);
   }
 
-  function isClaimed(address _erc20, uint256 _merkleCount, uint256 index) public view returns (bool) {
-        return bitMaps[_erc20][_merkleCount].get(index);
+  function isClaimed(address _tokenAddress, uint256 _merkleCount, uint256 index) public view returns (bool) {
+        return bitMaps[_tokenAddress][_merkleCount].get(index);
     }
 
-    function _setClaimed(address _erc20, uint256 _merkleCount, uint256 index) private {
-       bitMaps[_erc20][_merkleCount].setTo(index, true);
+    function _setClaimed(address _tokenAddress, uint256 _merkleCount, uint256 index) private {
+       bitMaps[_tokenAddress][_merkleCount].setTo(index, true);
     }
 
   function withdraw(
-    address _account,
-    address _erc20,
+    address payable _account,
+    address _tokenAddress,
     uint256 _merkleCount,
     uint256 _merkleIndex,
     uint256 _amount,
     bytes32[] calldata _merkleProof
   ) external {
-    require(isClaimed(_erc20, _merkleCount, _merkleIndex) == false, "Already claimed");
-    require(balance[_erc20] >= _amount, "Insufficient balance");
+    require(isClaimed(_tokenAddress, _merkleCount, _merkleIndex) == false, "Already claimed");
+    require(balance[_tokenAddress] >= _amount, "Insufficient balance");
 
     bytes32 leaf = _leafHash(_merkleIndex, _account, _amount);
 
     // merkle proof valid?
-    require(MerkleProof.verify(_merkleProof, merkleRoots[_erc20][_merkleCount].merkleRoot, leaf) == true, "Claim not found");
+    require(MerkleProof.verify(_merkleProof, merkleRoots[_tokenAddress][_merkleCount].merkleRoot, leaf) == true, "Claim not found");
 
-    balance[_erc20] = balance[_erc20] - _amount;
-    IERC20(_erc20).safeTransfer(_account, _amount);
+    balance[_tokenAddress] = balance[_tokenAddress] - _amount;
+    if(_tokenAddress == address(0)) {
+      _account.transfer(_amount);
+    } else {
+      IERC20(_tokenAddress).safeTransfer(_account, _amount); 
+    }
 
-    _setClaimed(_erc20, _merkleCount, _merkleIndex);
+    _setClaimed(_tokenAddress, _merkleCount, _merkleIndex);
 
-    emit NewWithdrawal(_erc20, msg.sender, _amount);
+    emit NewWithdrawal(_tokenAddress, msg.sender, _amount);
   }
 
   // generate hash of (claim holder, amount)
